@@ -1,25 +1,33 @@
 -module(chat_noir_server).
 
--export([start/0, loop/1]).
+-export([start/0, loop/1, server_test/0]).
 
 start()->
 	tcp_server:start(?MODULE, 8888, {?MODULE, loop}).
 
-loop(Socket) ->
+do_recv(Socket) ->
 	case gen_tcp:recv(Socket, 0) of
 		{ok, Data} ->
-			io:format("Data: ~p~n", [binary_to_list(Data)]),
-			Message = binary_to_list(Data),
-			case Message of
-				"end\r\n" ->
-					gen_tcp:send(Socket, "Goodbye\n"),
-					gen_tcp:close(Socket),
-					ok;
-				_ ->
-					gen_tcp:send(Socket, "Hello world\n"),
-					loop(Socket)
-			end;
+			binary_to_list(Data);
 		{error, closed} -> 
 			ok
 	end.
 
+parse_message(SomeString) ->
+	{M, B} = lists:splitwith(fun(S) -> [S] =/= "{" end, SomeString).
+
+loop(Socket) ->
+	Message = do_recv(Socket),
+	{Method, Body} = parse_message(Message),
+	case Method of
+		"NEWCLIENT" ->
+			gen_tcp:send(Socket, "New Client Arrived! \n"),
+			loop(Socket),
+			ok;
+		_ ->
+			gen_tcp:send(Socket, "Error\n"),
+			gen_tcp:close(Socket)
+	end.
+
+server_test() ->
+	"NEWCLIENT", _ = parse_message("NEWCLIENT{NAME=douglas;}").
