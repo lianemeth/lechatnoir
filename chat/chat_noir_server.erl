@@ -14,7 +14,7 @@ start()->
 do_recv(Socket) ->
 	case gen_tcp:recv(Socket, 0) of
 		{ok, Data} ->
-			binary_to_list(Data);
+			Data;
 		{error, closed} -> 
 			ok
 	end.
