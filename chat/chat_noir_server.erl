@@ -19,33 +19,28 @@ do_recv(Socket) ->
 			ok
 	end.
 
-get_message_type(SomeString) ->
-	[Type, B] = re:split(SomeString, "{", [{return, list}]),
-	Body = string:strip(B, right, $}),
-	{Type, Body}.
+get_message_type(MessageMap) ->
+	string:to_upper(
+	  binary_to_list(
+	    maps:get(<<"type">>, MessageMap))). 
 
 parse_client(SomeString, Socket) ->
 	#client{name="Douglas", info="ada", socket=Socket}.
 
-parse_message(SomeString, Socket) ->
-	{10, 11}.
-
-public_message(User, Message, Clients)->
-	ok.
+parse_message(SomeString) ->
+	jsone:decode(SomeString). 
 
 loop(Socket, Clients) ->
-	Message = do_recv(Socket),
-	io:format("New Client ~p ", [Clients]),
-	{Method, Body} = get_message_type(Message),
-	case Method of
+	MessageMap = parse_message(do_recv(Socket)),
+	case get_message_type(MessageMap) of
 		"NEWCLIENT" ->
 			gen_tcp:send(Socket, "New Client Arrived! \n"),
-			NewClient = parse_client(Body, Socket),
+			NewClient = parse_client(MessageMap, Socket),
 			io:format("New Client ~p ", [NewClient]),
 			loop(Socket, [NewClient | Clients]);
 		"PUBLIC" ->
-			{User, ChatMsg} = parse_message(Body, Socket),
-			public_message(User, ChatMsg, Clients),
+			loop(Socket, Clients);
+		"PRIVATE" ->
 			loop(Socket, Clients);
 		_ ->
 			gen_tcp:send(Socket, "Error\n"),
@@ -53,5 +48,5 @@ loop(Socket, Clients) ->
 	end.
 
 server_test() ->
-	"NEWCLIENT", _ = get_message_type("NEWCLIENT{NAME=douglas;}"),
-        "PUBLIC", _ = get_message_type("PUBLIC{MSG=hello world;}").
+	NewClientMap = parse_message(<<"{\"type\":\"newclient\", \"name\":\"douglas\"}">>),
+	"NEWCLIENT" = get_message_type(NewClientMap).
