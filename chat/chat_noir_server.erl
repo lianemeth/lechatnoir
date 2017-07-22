@@ -20,27 +20,33 @@ do_recv(Socket) ->
 	end.
 
 get_message_type(MessageMap) ->
-	string:to_upper(
-	  binary_to_list(
-	    maps:get(<<"type">>, MessageMap))). 
+        maps:get(<<"TYPE">>, MessageMap). 
 
-parse_client(SomeString, Socket) ->
-	#client{name="Douglas", info="ada", socket=Socket}.
+parse_client(MsgMap, Socket) ->
+	Name = maps:get(<<"NAME">>, MsgMap),
+	Info = maps:get(<<"INFO">>, MsgMap),
+	#client{name=Name, 
+	        info=Info, 
+	        socket=Socket}.
 
 parse_message(SomeString) ->
 	jsone:decode(SomeString). 
 
+send_public_message(Message, Clients) ->
+	lists:foreach(fun(Cli) ->
+			gen_tcp:send(Cli#client.socket, Message) end
+		     ,Clients).
+
 loop(Socket, Clients) ->
 	MessageMap = parse_message(do_recv(Socket)),
 	case get_message_type(MessageMap) of
-		"NEWCLIENT" ->
-			gen_tcp:send(Socket, "New Client Arrived! \n"),
+		<<"NEWCLIENT">> ->
 			NewClient = parse_client(MessageMap, Socket),
-			io:format("New Client ~p ", [NewClient]),
+			send_public_message(<<"New Client Arrived! \n">>, [NewClient | Clients]),
 			loop(Socket, [NewClient | Clients]);
-		"PUBLIC" ->
+		<<"PUBLIC">> ->
 			loop(Socket, Clients);
-		"PRIVATE" ->
+		<<"PRIVATE">> ->
 			loop(Socket, Clients);
 		_ ->
 			gen_tcp:send(Socket, "Error\n"),
@@ -48,5 +54,7 @@ loop(Socket, Clients) ->
 	end.
 
 server_test() ->
-	NewClientMap = parse_message(<<"{\"type\":\"newclient\", \"name\":\"douglas\"}">>),
-	"NEWCLIENT" = get_message_type(NewClientMap).
+	NewClientMap = parse_message(<<"{\"TYPE\":\"NEWCLIENT\", \"NAME\":\"DOUGLAs\", \"INFO\":\"ADADA\"}">>),
+	<<"NEWCLIENT">> = get_message_type(NewClientMap),
+	{client, <<"DOUGLAs">>, <<"ADADA">>, 123} = parse_client(NewClientMap, 123).
+
