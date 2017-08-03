@@ -2,14 +2,37 @@
 
 -export([start/0, loop/1, server_test/0]).
 
+-define(TCP_OPTIONS, [binary, {packet, 0}, {active, false}, {reuseaddr, true}]).
+
 -record(client, {
 		name,
 		info,
 		socket
 	}).
 
-start()->
-	tcp_server:start(?MODULE, 8888, {?MODULE, loop}).
+-record(server_state, {
+	  port,
+	  nickserver,
+	  socket=null}).
+
+start(Name, Port, Loop)->
+	NickServer = nickserver:start_nickserver(),
+	ServerState = #server_state{port = Port, nickserver = NickServer},
+	register(Name, spawn(fun() -> init(ServerState) end)).
+
+accept(ServerState=#server_state{socket=Socket, nickserver=NickServer}) ->
+	{ok, Socket} = gen_tcp:accept(Socket),
+	% gen_server:cast(self(), {accepted, self()}),
+	loop(Socket, NickServer).
+
+init(ServerState = #server_state{port=Port, nickserver=NickServer}) ->
+	case gen_tcp:listen(Port, ?TCP_OPTIONS) of
+		{ok, Socket} ->
+			NewState = ServerState#server_state{socket = Socket},
+			{ok, spawn(?MODULE, accept, NewState)};
+		{error, Reason} ->
+			{stop, Reason}
+	end.
 
 do_recv(Socket) ->
 	case gen_tcp:recv(Socket, 0) of
@@ -37,7 +60,7 @@ send_public_message(Message, Clients) ->
 			gen_tcp:send(Cli#client.socket, Message) end
 		     ,Clients).
 
-loop(Socket) ->
+loop(Socket, NickServer) ->
 	MessageMap = parse_message(do_recv(Socket)),
 	case get_message_type(MessageMap) of
 		<<"NEWCLIENT">> ->
@@ -57,4 +80,3 @@ server_test() ->
 	NewClientMap = parse_message(<<"{\"TYPE\":\"NEWCLIENT\", \"NAME\":\"DOUGLAs\", \"INFO\":\"ADADA\"}">>),
 	<<"NEWCLIENT">> = get_message_type(NewClientMap),
 	{client, <<"DOUGLAs">>, <<"ADADA">>, 123} = parse_client(NewClientMap, 123).
-
