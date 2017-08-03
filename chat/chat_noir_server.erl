@@ -1,6 +1,6 @@
 -module(chat_noir_server).
 
--export([start/0, loop/2, server_test/0]).
+-export([start/0, loop/1, server_test/0]).
 
 -record(client, {
 		name,
@@ -9,7 +9,7 @@
 	}).
 
 start()->
-	tcp_server:start(?MODULE, 8888, {?MODULE, loop}, []).
+	tcp_server:start(?MODULE, 8888, {?MODULE, loop}).
 
 do_recv(Socket) ->
 	case gen_tcp:recv(Socket, 0) of
@@ -37,17 +37,17 @@ send_public_message(Message, Clients) ->
 			gen_tcp:send(Cli#client.socket, Message) end
 		     ,Clients).
 
-loop(Socket, Clients) ->
+loop(Socket) ->
 	MessageMap = parse_message(do_recv(Socket)),
 	case get_message_type(MessageMap) of
 		<<"NEWCLIENT">> ->
 			NewClient = parse_client(MessageMap, Socket),
-			send_public_message(<<"New Client Arrived! \n">>, [NewClient | Clients]),
-			loop(Socket, [NewClient | Clients]);
+			send_public_message(<<"New Client Arrived! \n">>),
+			loop(Socket);
 		<<"PUBLIC">> ->
-			loop(Socket, Clients);
+			loop(Socket);
 		<<"PRIVATE">> ->
-			loop(Socket, Clients);
+			loop(Socket);
 		_ ->
 			gen_tcp:send(Socket, "Error\n"),
 			gen_tcp:close(Socket)
