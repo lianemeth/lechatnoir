@@ -11,6 +11,11 @@
 		socket
 	}).
 
+-record(public, {
+	  from,
+	  message
+        }).
+
 -record(server_state, {
 	  port,
 	  nickserver,
@@ -47,7 +52,12 @@ init(ServerState = #server_state{port=Port, nickserver=NickServer}) ->
 
 
 get_message_type(MessageMap) ->
-        maps:get(<<"TYPE">>, MessageMap). 
+	case maps:is_key(<<"TYPE">>, MessageMap) of
+		true -> 
+			maps:get(<<"TYPE">>, MessageMap);
+		false->
+			{error, notype}
+	end.
 
 parse_client(MsgMap, Socket) ->
 	Name = maps:get(<<"NAME">>, MsgMap),
@@ -56,17 +66,18 @@ parse_client(MsgMap, Socket) ->
 	        info=Info, 
 	        socket=Socket}.
 
+parse_public(MsgMap)->
+	FromName = maps:get(<<"FROM">>, MsgMap),
+	Message = maps:get(<<"Message">>, MsgMap),
+	#public{from=FromName,
+		message=Message}.
+
+
 parse_message([]) ->
-	<<"Empty shit¨">>;
+	ok;
 parse_message(SomeString) ->
 	jsone:decode(SomeString). 
 
-
-send_public_message(Message) ->
-	ok.
-	%lists:foreach(fun(Cli) ->
-	%		gen_tcp:send(Cli#client.socket, Message) end
-	%	     ,Clients).
 
 loop(Socket, NickServer) ->
 	case gen_tcp:recv(Socket, 0) of
@@ -77,14 +88,17 @@ loop(Socket, NickServer) ->
 	end.
 
 
+
 process_mesage(Data, Socket, NickServer) ->
 	MessageMap = parse_message(Data),
 	case get_message_type(MessageMap) of
 		<<"NEWCLIENT">> ->
 			NewClient = parse_client(MessageMap, Socket),
-			send_public_message(<<"New Client Arrived! \n">>),
+			NickServer ! {self(), {newclient, NewClient}},
 			loop(Socket, NickServer);
 		<<"PUBLIC">> ->
+			NewPublicMessage = parse_public(MessageMap),
+			NickServer ! {self(), {public, NewPublicMessage}},
 			loop(Socket, NickServer);
 		<<"PRIVATE">> ->
 			loop(Socket, NickServer);
