@@ -28,9 +28,8 @@ start(Name, Port)->
 accept_loop(State=#server_state{socket=ListenSocket, nickserver=NickServer}) ->
 	case  gen_tcp:accept(ListenSocket) of
 		{ok, AcceptSocket} ->
-			Pid = spawn(?MODULE, loop, [AcceptSocket, NickServer]),
-			%tcp:controlling_process(AcceptSocket, Pid),
-			{ok, Pid};
+			spawn(?MODULE, loop, [AcceptSocket, NickServer]),
+			accept_loop(State);
 		{error, Reason} ->
 			io:format(<<"WHAT">>),
 			io:format(Reason),
@@ -40,21 +39,12 @@ accept_loop(State=#server_state{socket=ListenSocket, nickserver=NickServer}) ->
 init(ServerState = #server_state{port=Port, nickserver=NickServer}) ->
 	case gen_tcp:listen(Port, ?TCP_OPTIONS) of
 		{ok, ListenSocket} ->
-			io:format(<<"Listen">>),
 			NewState = ServerState#server_state{socket = ListenSocket, nickserver=NickServer},
 			accept_loop(NewState);
 		{error, Reason} ->
-			io:format(<<"Fail">>),
 			{stop, Reason}
 	end.
 
-do_recv(Socket) ->
-	case gen_tcp:recv(Socket, 0) of
-		{ok, Data} ->
-			Data;
-		{error, closed} -> 
-			ok
-	end.
 
 get_message_type(MessageMap) ->
         maps:get(<<"TYPE">>, MessageMap). 
@@ -66,8 +56,11 @@ parse_client(MsgMap, Socket) ->
 	        info=Info, 
 	        socket=Socket}.
 
+parse_message([]) ->
+	<<"Empty shit¨">>;
 parse_message(SomeString) ->
 	jsone:decode(SomeString). 
+
 
 send_public_message(Message) ->
 	ok.
@@ -76,7 +69,16 @@ send_public_message(Message) ->
 	%	     ,Clients).
 
 loop(Socket, NickServer) ->
-	MessageMap = parse_message(do_recv(Socket)),
+	case gen_tcp:recv(Socket, 0) of
+		{ok, Data} ->
+			process_mesage(Data, Socket, NickServer);
+		{error, closed} -> 
+			{error, closed}
+	end.
+
+
+process_mesage(Data, Socket, NickServer) ->
+	MessageMap = parse_message(Data),
 	case get_message_type(MessageMap) of
 		<<"NEWCLIENT">> ->
 			NewClient = parse_client(MessageMap, Socket),
