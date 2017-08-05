@@ -51,32 +51,35 @@ init(ServerState = #server_state{port=Port, nickserver=NickServer}) ->
 	end.
 
 
-get_message_type(MessageMap) ->
-	case maps:is_key(<<"TYPE">>, MessageMap) of
-		true -> 
-			maps:get(<<"TYPE">>, MessageMap);
-		false->
-			{error, notype}
-	end.
+get_message_type([]) -> null;
+get_message_type([<<"PUBLIC">> | _]) -> public;
+get_message_type([<<"NEWCLIENT">> | _]) -> newclient;
+get_message_type([<<"PVT">>|_]) -> private;
+get_message_type([_]) ->  null.
 
-parse_client(MsgMap, Socket) ->
-	Name = maps:get(<<"NAME">>, MsgMap),
-	Info = maps:get(<<"INFO">>, MsgMap),
+%get_message_type(MessageList) ->
+%	lists:nth(1, MessageList).
+
+parse_client(MsgList, Socket) ->
+	Name = lists:nth(2, MsgList),
+	Info = lists:nth(3, MsgList),
 	#client{name=Name, 
 	        info=Info, 
 	        socket=Socket}.
 
-parse_public(MsgMap)->
-	FromName = maps:get(<<"FROM">>, MsgMap),
-	Message = maps:get(<<"Message">>, MsgMap),
+parse_public(MsgList)->
+	FromName = lists:nth(2, MsgList),
+	Message = lists:nth(3, MsgList),
 	#public{from=FromName,
 		message=Message}.
 
 
 parse_message([]) ->
-	ok;
-parse_message(SomeString) ->
-	jsone:decode(SomeString). 
+	[];
+parse_message(<<"">>) ->
+	[];
+parse_message(SomeBinary) ->
+	binary:split(SomeBinary, <<";">>,  [global, trim_all]). 
 
 
 loop(Socket, NickServer) ->
@@ -90,17 +93,17 @@ loop(Socket, NickServer) ->
 
 
 process_mesage(Data, Socket, NickServer) ->
-	MessageMap = parse_message(Data),
-	case get_message_type(MessageMap) of
-		<<"NEWCLIENT">> ->
-			NewClient = parse_client(MessageMap, Socket),
+	MessageList = parse_message(Data),
+	case get_message_type(MessageList) of
+		newclient ->
+			NewClient = parse_client(MessageList, Socket),
 			NickServer ! {self(), {newclient, NewClient}},
 			loop(Socket, NickServer);
-		<<"PUBLIC">> ->
-			NewPublicMessage = parse_public(MessageMap),
+		public ->
+			NewPublicMessage = parse_public(MessageList),
 			NickServer ! {self(), {public, NewPublicMessage}},
 			loop(Socket, NickServer);
-		<<"PRIVATE">> ->
+		private ->
 			loop(Socket, NickServer);
 		_ ->
 			gen_tcp:send(Socket, "Error\n"),
@@ -109,6 +112,6 @@ process_mesage(Data, Socket, NickServer) ->
 
 
 server_test() ->
-	NewClientMap = parse_message(<<"{\"TYPE\":\"NEWCLIENT\", \"NAME\":\"DOUGLAs\", \"INFO\":\"ADADA\"}">>),
+	NewClientMap = parse_message(<<"NEWCLIENT;DOUGLAs;ADADA">>),
 	<<"NEWCLIENT">> = get_message_type(NewClientMap),
 	{client, <<"DOUGLAs">>, <<"ADADA">>, 123} = parse_client(NewClientMap, 123).
