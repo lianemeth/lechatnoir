@@ -12,9 +12,9 @@
 	}).
 
 -record(public, {
-	  from,
-	  message
-        }).
+	  message,
+	  socket
+	 }).
 
 -record(server_state, {
 	  port,
@@ -52,13 +52,11 @@ init(ServerState = #server_state{port=Port, nickserver=NickServer}) ->
 
 
 get_message_type([]) -> null;
-get_message_type([<<"PUBLIC">> | _]) -> public;
-get_message_type([<<"NEWCLIENT">> | _]) -> newclient;
+get_message_type([<<"PUB">> | _]) -> public;
+get_message_type([<<"NEW">> | _]) -> newclient;
 get_message_type([<<"PVT">>|_]) -> private;
 get_message_type([_]) ->  null.
 
-%get_message_type(MessageList) ->
-%	lists:nth(1, MessageList).
 
 parse_client(MsgList, Socket) ->
 	Name = lists:nth(2, MsgList),
@@ -67,11 +65,10 @@ parse_client(MsgList, Socket) ->
 	        info=Info, 
 	        socket=Socket}.
 
-parse_public(MsgList)->
-	FromName = lists:nth(2, MsgList),
-	Message = lists:nth(3, MsgList),
-	#public{from=FromName,
-		message=Message}.
+parse_public(MsgList, Socket)->
+	Message = lists:nth(2, MsgList),
+	#public{message=Message,
+	       socket=Socket}.
 
 
 parse_message([]) ->
@@ -100,7 +97,7 @@ process_mesage(Data, Socket, NickServer) ->
 			NickServer ! {self(), {newclient, NewClient}},
 			loop(Socket, NickServer);
 		public ->
-			NewPublicMessage = parse_public(MessageList),
+			NewPublicMessage = parse_public(MessageList, Socket),
 			NickServer ! {self(), {public, NewPublicMessage}},
 			loop(Socket, NickServer);
 		private ->
@@ -112,6 +109,11 @@ process_mesage(Data, Socket, NickServer) ->
 
 
 server_test() ->
-	NewClientMap = parse_message(<<"NEWCLIENT;DOUGLAs;ADADA">>),
-	<<"NEWCLIENT">> = get_message_type(NewClientMap),
-	{client, <<"DOUGLAs">>, <<"ADADA">>, 123} = parse_client(NewClientMap, 123).
+	[<<"NEW">>, <<"DOUGLAS">>, <<"ADADA">>] = parse_message(<<"NEW;DOUGLAS;ADADA">>),
+	NewClientList = parse_message(<<"NEW;DOUGLAS;ADADA">>),
+	newclient = get_message_type(NewClientList),
+	public = get_message_type([<<"PUB">>, <<"SOMETHING">>]),
+	private = get_message_type([<<"PVT">>,<<"SOMEONE">>, <<"SOMETHING">>]),
+	{client, <<"DOUGLAS">>, <<"ADADA">>, 123} = parse_client(NewClientList, 123),
+	NewPublicMsg= parse_message(<<"PUB;;SOMETHING">>),
+	{public, <<"SOMETHING">>, 123} = parse_public(NewPublicMsg, 123).
